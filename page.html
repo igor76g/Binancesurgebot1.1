@@ -1,0 +1,56 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SurgeBot</title>
+<style>
+:root{--bg:#fff;--fg:#1a1a1a;--mut:#666;--line:#ddd;--acc:#0b6bcb;--bad:#c0392b;--good:#1e8449}
+@media(prefers-color-scheme:dark){:root{--bg:#14171c;--fg:#e8e8e8;--mut:#9aa;--line:#2c333c;--acc:#5aa9ff;--bad:#ff6b5b;--good:#4cd48a}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px system-ui,sans-serif}
+header{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--line);padding:10px 16px}
+main{padding:12px 16px 40px;max-width:900px;margin:auto}
+button{font:inherit;padding:9px 14px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
+button.p{background:var(--acc);color:#fff;border-color:var(--acc)} .tabs{display:flex;gap:6px;margin-top:8px;overflow-x:auto}
+.tabs button.on{border-color:var(--acc);color:var(--acc)} table{border-collapse:collapse;width:100%;font-size:13px;margin:6px 0 14px}
+th,td{padding:5px 6px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap} th:first-child,td:first-child{text-align:left}
+.wrap{overflow-x:auto} h3{margin:14px 0 4px;font-size:14px;color:var(--mut)} .row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:6px 0}
+input,select{font:inherit;padding:7px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);width:120px;text-align:right}
+input.k{width:100%;text-align:left} .pos{color:var(--good)}.neg{color:var(--bad)} pre{white-space:pre-wrap;font-size:12px}
+.warn{color:var(--bad);font-size:13px}
+</style></head><body>
+<header><div class="row"><b id="st">Остановлен</b><button id="go" class="p" onclick="toggle()">Старт</button></div>
+<div id="info" style="color:var(--mut);font-size:13px"></div>
+<div class="tabs"><button data-t="mon" class="on">Мониторинг</button><button data-t="tr">Сделки</button><button data-t="set">Настройки</button><button data-t="log">Журнал</button></div></header>
+<main>
+<section id="mon"><h3>Под наблюдением</h3><div class="wrap"><table id="tw"></table></div><h3>Открытые сделки</h3><div class="wrap"><table id="tp"></table></div><h3>Последний скан</h3><div class="wrap"><table id="ts"></table></div></section>
+<section id="tr" hidden><div class="wrap"><table id="tt"></table></div></section>
+<section id="set" hidden><div id="form"></div><button class="p" onclick="save()">Сохранить</button> <span id="msg"></span></section>
+<section id="log" hidden><pre id="lg"></pre></section>
+</main>
+<script>
+const $=id=>document.getElementById(id);let running=false,S=null;
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x==b));['mon','tr','set','log'].forEach(t=>$(t).hidden=t!=b.dataset.t)});
+const esc=s=>String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+function tbl(el,heads,rows){el.innerHTML='<tr>'+heads.map(h=>'<th>'+h+'</th>').join('')+'</tr>'+(rows.length?rows.map(r=>'<tr>'+r.map(c=>'<td>'+c+'</td>').join('')+'</tr>').join(''):'<tr><td colspan="'+heads.length+'" style="text-align:left;color:var(--mut)">пока пусто</td></tr>')}
+const n=v=>typeof v==='number'?+v.toPrecision(7):(v??'-');const sg=v=>'<span class="'+(v>=0?'pos':'neg')+'">'+(v>=0?'+':'')+v+'</span>';
+async function poll(){try{const s=await (await fetch('/state')).json();running=s.running;$('go').textContent=running?'Стоп':'Старт';
+$('st').textContent=(running?'Работает':'Остановлен')+(s.mode?' ['+s.mode+']':'')+(s.halted?' — дневной лимит':'');
+$('info').textContent=s.mode?`Баланс≈${s.equity}  PnL за день ${s.day_pnl}  Сделок ${s.trades.length}  Открыто ${s.positions.length}`:'';
+if(s.mode){tbl($('tw'),['Монета','Объём x','NATR x','H','L','До'],s.watch.map(w=>[w.symbol,w.vol_ratio.toFixed(1),w.natr_ratio.toFixed(1),n(w.H),n(w.L),w.until]));
+tbl($('tp'),['Монета','Вход','Стоп','Тейк','Объём','Риск'],s.positions.map(p=>[p.symbol,n(p.entry),n(p.stop),n(p.tp),n(p.qty),p.risk]));
+tbl($('ts'),['Монета','Оборот млн','Объём x','NATR x','NATR %','Прошла'],s.scan.map(r=>[r.symbol,r.qv24,r.vol_ratio.toFixed(1),r.natr_ratio.toFixed(1),r.natr_now.toFixed(2),r.ok?'да':'']));
+tbl($('tt'),['Закрыта','Монета','Причина','Вход','Выход','PnL','R'],s.trades.map(t=>[t.time,t.symbol,t.reason,n(t.entry),n(t.exit),sg(t.pnl),sg(t.r)]))}
+$('lg').textContent=s.logs.join('\n')}catch(e){$('st').textContent='Нет связи с сервером'}}
+async function toggle(){if(running){const c=confirm('Закрыть открытые сделки по рынку?\nОК - закрыть, Отмена - оставить (в рабочем режиме стоп и тейк останутся на бирже).');
+await fetch('/stop',{method:'POST',body:JSON.stringify({close:c})})}else{await save(true);
+if(S.values.mode==='live'&&!confirm('Бот будет открывать НАСТОЯЩИЕ сделки'+(S.values.testnet?' на тестовой сети':' на реальном счёте')+'. Запустить?'))return;
+const r=await (await fetch('/start',{method:'POST',body:'{}'})).json();if(!r.ok)alert(r.error)}poll()}
+async function load(){S=await (await fetch('/settings')).json();const v=S.values;let h='<div class="row"><span>Режим</span><select id="mode"><option value="demo">Демо</option><option value="live">Рабочий</option></select></div>'+
+'<div class="row"><span>Тестовая сеть (testnet)</span><input type="checkbox" id="testnet" style="width:auto"></div>'+
+'<div class="row"><span>API Key</span></div><input class="k" id="api_key" type="password" autocomplete="off"><div class="row"><span>API Secret</span></div><input class="k" id="api_secret" type="password" autocomplete="off">'+
+'<div class="row"><span>Запомнить ключи (открытым текстом)</span><input type="checkbox" id="remember_keys" style="width:auto"></div>'+
+'<p class="warn">Ключ: только Futures + Trading, без права вывода, с привязкой к IP. Аккаунт в One-way Mode.</p>';
+S.schema.forEach(g=>{h+='<h3>'+g.group+'</h3>';g.fields.forEach(f=>h+='<div class="row"><span>'+f.label+'</span><input id="'+f.key+'" inputmode="decimal"></div>')});
+$('form').innerHTML=h;S.schema.forEach(g=>g.fields.forEach(f=>$(f.key).value=v[f.key]));$('mode').value=v.mode;$('testnet').checked=v.testnet;$('remember_keys').checked=v.remember_keys;$('api_key').value=v.api_key;$('api_secret').value=v.api_secret}
+async function save(quiet){const d={mode:$('mode').value,testnet:$('testnet').checked,remember_keys:$('remember_keys').checked,api_key:$('api_key').value,api_secret:$('api_secret').value};
+S.schema.forEach(g=>g.fields.forEach(f=>d[f.key]=$(f.key).value));const r=await (await fetch('/settings',{method:'POST',body:JSON.stringify(d)})).json();
+if(!r.ok){alert(r.error);return}await load();if(!quiet){$('msg').textContent='Сохранено';setTimeout(()=>$('msg').textContent='',2000)}}
+load();poll();setInterval(poll,2000);
+</script></body></html>
