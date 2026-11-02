@@ -4,7 +4,7 @@ package.name = surgebot
 package.domain = org.surgebot
 source.dir = .
 source.include_exts = py,html
-source.exclude_dirs = .github,bin,.buildozer,android_extra,tests
+source.exclude_dirs = .github,bin,.buildozer,tests
 version = 1.0.0
 requirements = hostpython3==3.11.5,python3==3.11.5,kivy,pyjnius,android,openssl,certifi
 orientation = portrait
@@ -15,7 +15,6 @@ android.api = 34
 android.minapi = 24
 android.archs = arm64-v8a, armeabi-v7a
 android.accept_sdk_license = True
-android.extra_manifest_application_arguments = ./android_extra/app_args.xml
 android.allow_backup = False
 p4a.branch = develop
 
