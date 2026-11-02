@@ -46,7 +46,7 @@ class Root(BoxLayout):
                           font_size="12sp" if prev else "18sp", halign="left" if prev else "center", valign="middle")
         self.info.bind(size=lambda w, s: setattr(w, "text_size", s))
         self.add_widget(self.info)
-        for text, cb in (("Открыть интерфейс", self.open_webview), ("Открыть в браузере", self.open_browser),
+        for text, cb in (("Открыть интерфейс (в браузере)", self.open_browser),
                          ("Остановить службу и выйти", self.stop_all)):
             self.add_widget(Button(text=text, size_hint_y=None, height=64, on_release=cb))
         self.webview = None
